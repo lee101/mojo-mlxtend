@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mojo-mlxtend"
+version = "0.1.0"
+description = "Mojo-accelerated frequent itemsets and association rules"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pandas"]
+license = {file = "LICENSE"}
+
+[tool.setuptools]
+package-dir = {"" = "python"}
+
+[tool.setuptools.packages.find]
+where = ["python"]
