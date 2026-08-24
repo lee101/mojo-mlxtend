@@ -101,6 +101,28 @@ def test_apriori_colnames_low_memory_and_parallel():
     assert_itemset_parity(ours, theirs)
 
 
+def test_candidate_counter_simd_tail_below_parallel_threshold():
+    rng = np.random.default_rng(31)
+    values = rng.integers(0, 2, size=(127, 13), dtype=np.uint8)
+    candidates = np.array([[0, 4], [3, 8], [7, 12]], dtype=np.int64)
+    expected = np.array(
+        [np.count_nonzero(np.all(values[:, candidate] != 0, axis=1)) for candidate in candidates]
+    )
+    assert np.array_equal(_count_candidates(values, candidates, n_jobs=2), expected)
+
+
+def test_candidate_counter_parallel_threshold_and_simd_tail():
+    rng = np.random.default_rng(37)
+    values = rng.integers(0, 2, size=(32_771, 19), dtype=np.uint8)
+    candidates = np.array(
+        [[index, index + 1, index + 2] for index in range(17)], dtype=np.int64
+    )
+    expected = np.array(
+        [np.count_nonzero(np.all(values[:, candidate] != 0, axis=1)) for candidate in candidates]
+    )
+    assert np.array_equal(_count_candidates(values, candidates, n_jobs=4), expected)
+
+
 @pytest.mark.parametrize("algorithm,reference", [(fpgrowth, upstream_fpgrowth), (fpmax, upstream_fpmax)])
 def test_vertical_miners_basket_parity(algorithm, reference):
     frame = basket()

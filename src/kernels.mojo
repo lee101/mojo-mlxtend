@@ -1,13 +1,16 @@
 """Frequent-pattern counting and association-rule metric kernels."""
 
 from std.bit import pop_count
+from max.algorithm import parallelize
 from std.sys.info import simd_width_of
 
 comptime BPtr = UnsafePointer[UInt8, AnyOrigin[mut=True]]
 comptime IPtr = UnsafePointer[Int64, AnyOrigin[mut=True]]
 comptime UPtr = UnsafePointer[UInt64, AnyOrigin[mut=True]]
 comptime FPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
+comptime BW = simd_width_of[DType.uint8]()
 comptime UW = simd_width_of[DType.uint64]()
+comptime COUNT_PARALLEL_THRESHOLD = 1_000_000
 
 
 def count_candidate(
@@ -21,17 +24,24 @@ def count_candidate(
 ):
     var count = 0
     var candidate_offset = candidate * width
-    for row in range(rows):
-        var present = True
-        var column = 0
-        while column < width:
+    var row = 0
+    while row + BW <= rows:
+        var present = SIMD[DType.uint8, BW](1)
+        for column in range(width):
             var item = Int(candidates[candidate_offset + column])
-            if item < 0 or item >= cols or data[row * cols + item] == 0:
+            present &= (data + row * cols + item).strided_load[width=BW](cols)
+        count += Int(present.reduce_add())
+        row += BW
+    while row < rows:
+        var present = True
+        for column in range(width):
+            var item = Int(candidates[candidate_offset + column])
+            if data[row * cols + item] == 0:
                 present = False
                 break
-            column += 1
         if present:
             count += 1
+        row += 1
     counts[candidate] = Int64(count)
 
 
@@ -60,13 +70,25 @@ def mmlx_count_candidates(
     var data = BPtr(unsafe_from_address=data_addr)
     var candidates = IPtr(unsafe_from_address=candidates_addr)
     var counts = IPtr(unsafe_from_address=counts_addr)
+    for index in range(candidate_count * width):
+        var item = Int(candidates[index])
+        if item < 0 or item >= cols:
+            return -2
 
-    @__parameter
-    def work(candidate: Int):
+    def work(
+        candidate: Int,
+    ) {imm data, imm candidates, imm counts, imm rows, imm cols, imm width}:
         count_candidate(data, candidates, counts, candidate, rows, cols, width)
 
-    for candidate in range(candidate_count):
-        work(candidate)
+    if (
+        threads > 1
+        and candidate_count > 1
+        and rows * candidate_count * width >= COUNT_PARALLEL_THRESHOLD
+    ):
+        parallelize(work, candidate_count, min(threads, candidate_count))
+    else:
+        for candidate in range(candidate_count):
+            work(candidate)
     return 0
 
 

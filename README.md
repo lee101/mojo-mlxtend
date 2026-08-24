@@ -83,8 +83,10 @@ after `pixi install` and `pixi run build`.
 ## How it works
 
 `apriori` performs the join and prune steps in Python, then sends batches of
-candidates to Mojo. The kernel scans the row-major `uint8` transaction matrix
-without constructing mlxtend's temporary three-dimensional boolean arrays.
+candidates to Mojo. The kernel scans the zero-copy row-major `uint8` transaction
+matrix with strided SIMD loads and a scalar remainder loop, without constructing
+mlxtend's temporary three-dimensional boolean arrays. Independent candidates run
+in parallel only above a work threshold; smaller calls stay serial.
 `low_memory=True` uses smaller candidate batches.
 
 The compatible `fpgrowth` entry point uses a vertical Eclat-style engine:
@@ -106,8 +108,10 @@ cross ctypes as 64-bit integers and are reconstructed as
 compilation unit builds to `dist/libmojo-mlxtend.so`; no Python objects cross
 the ABI.
 
-There is intentionally no GPU path. These kernels are bandwidth-bound, and this
-project does not claim or maintain an unmeasured accelerator implementation.
+There is intentionally no GPU path. Candidate counting, bitset intersection and
+population counts, and rule metrics all remain below roughly 2 operations per
+byte moved. They are bandwidth-bound and do not justify host/device copies or a
+GPU implementation that loses to the CPU.
 
 ## Benchmarks
 
@@ -118,10 +122,10 @@ mojo-mlxtend time.
 
 | case | mojo-mlxtend | mlxtend | speedup | result |
 |---|---:|---:|---:|---:|
-| apriori 120k x 24, max_len=3 | 188.11 ms | 1152.05 ms | 6.12x | 324 |
-| fpgrowth 40k x 32 | 204.22 ms | 1114.53 ms | 5.46x | 568 |
-| fpmax 30k x 28 | 22.28 ms | 667.49 ms | 29.96x | 343 |
-| association_rules 3,767 itemsets | 185.70 ms | 378.83 ms | 2.04x | 43,089 |
+| apriori 120k x 24, max_len=3 | 87.55 ms | 1042.50 ms | 11.91x | 324 |
+| fpgrowth 40k x 32 | 26.83 ms | 790.15 ms | 29.45x | 568 |
+| fpmax 30k x 28 | 23.14 ms | 477.87 ms | 20.65x | 343 |
+| association_rules 3,767 itemsets | 132.50 ms | 197.28 ms | 1.49x | 43,089 |
 
 Benchmark results depend on transaction density, support threshold, item count,
 and CPU. The benchmark script asserts that both implementations return the
