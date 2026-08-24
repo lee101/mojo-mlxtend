@@ -1,6 +1,5 @@
 """Frequent-pattern counting and association-rule metric kernels."""
 
-from std.algorithm.functional import parallelize
 from std.bit import pop_count
 from std.sys.info import simd_width_of
 
@@ -62,15 +61,12 @@ def mmlx_count_candidates(
     var candidates = IPtr(unsafe_from_address=candidates_addr)
     var counts = IPtr(unsafe_from_address=counts_addr)
 
-    @parameter
+    @__parameter
     def work(candidate: Int):
         count_candidate(data, candidates, counts, candidate, rows, cols, width)
 
-    if threads > 1 and candidate_count * rows * width >= 1_000_000:
-        parallelize[work](candidate_count, min(threads, candidate_count))
-    else:
-        for candidate in range(candidate_count):
-            work(candidate)
+    for candidate in range(candidate_count):
+        work(candidate)
     return 0
 
 
@@ -143,7 +139,7 @@ def mmlx_intersect_count(
             return -2
     if parent_addr == 0:
 
-        @parameter
+        @__parameter
         def root_work(index: Int):
             var item = Int(item_ids[index])
             var count = copy_and_count(
@@ -151,15 +147,12 @@ def mmlx_intersect_count(
             )
             counts[index] = Int64(count)
 
-        if threads > 1 and item_count * words >= 16_384:
-            parallelize[root_work](item_count, min(threads, item_count))
-        else:
-            for index in range(item_count):
-                root_work(index)
+        for index in range(item_count):
+            root_work(index)
     else:
         var parent = UPtr(unsafe_from_address=parent_addr)
 
-        @parameter
+        @__parameter
         def child_work(index: Int):
             var item = Int(item_ids[index])
             var count = intersect_and_count(
@@ -170,11 +163,8 @@ def mmlx_intersect_count(
             )
             counts[index] = Int64(count)
 
-        if threads > 1 and item_count * words >= 16_384:
-            parallelize[child_work](item_count, min(threads, item_count))
-        else:
-            for index in range(item_count):
-                child_work(index)
+        for index in range(item_count):
+            child_work(index)
     return 0
 
 
@@ -237,13 +227,10 @@ def mmlx_rule_metrics(
     var source = FPtr(unsafe_from_address=source_addr)
     var destination = FPtr(unsafe_from_address=destination_addr)
 
-    @parameter
+    @__parameter
     def work(row: Int):
         compute_metric_row(source, destination, row)
 
-    if threads > 1 and rows >= 16_384:
-        parallelize[work](rows, min(threads, rows))
-    else:
-        for row in range(rows):
-            work(row)
+    for row in range(rows):
+        work(row)
     return 0
