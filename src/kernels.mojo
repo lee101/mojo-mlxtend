@@ -96,7 +96,7 @@ def copy_and_count(source: UPtr, destination: UPtr, words: Int) -> Int:
     var count = 0
     var word = 0
     while word + UW <= words:
-        var values = source.load[width=UW](word)
+        var values = source.unsafe_load[width=UW](word)
         destination.store(word, values)
         count += Int(pop_count(values).reduce_add())
         word += UW
@@ -115,7 +115,7 @@ def intersect_and_count(
     var word = 0
     while word + UW <= words:
         var values = (
-            parent.load[width=UW](word) & source.load[width=UW](word)
+            parent.unsafe_load[width=UW](word) & source.unsafe_load[width=UW](word)
         )
         destination.store(word, values)
         count += Int(pop_count(values).reduce_add())
